@@ -1,34 +1,29 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const nodemailer = require('nodemailer');
+import nodemailer from 'nodemailer';
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+// Serverless function handler
+export default async function handler(req, res) {
+  // Only accept POST requests
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Only POST requests allowed' });
+  }
 
-const PORT = process.env.PORT || 3000;
-
-// Create transporter with additional configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER, // your Gmail
-    pass: process.env.EMAIL_PASS, // your Gmail app password
-  },
-  // Add these settings to improve reliability
-  connectionTimeout: 5000,
-  greetingTimeout: 5000,
-  socketTimeout: 5000,
-});
-
-app.post('/send-email', async (req, res) => {
   const { number, time } = req.body;
 
   // Validate input
   if (!number || !time) {
-    return res.status(400).send('Missing number or time');
+    return res.status(400).json({ message: 'Missing number or time' });
   }
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER, // your Gmail
+      pass: process.env.EMAIL_PASS, // your Gmail app password
+    },
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
+  });
 
   const mailOptions = {
     from: process.env.EMAIL_USER,
@@ -38,33 +33,17 @@ app.post('/send-email', async (req, res) => {
   };
 
   try {
-    // Verify transporter connection before sending
-    await new Promise((resolve, reject) => {
-      transporter.verify((error, success) => {
-        if (error) {
-          console.error('Transporter verification failed:', error);
-          reject(error);
-        } else {
-          resolve(success);
-        }
-      });
-    });
-
+    // Send the email
     const info = await transporter.sendMail(mailOptions);
     console.log('Email sent:', info.response);
-    res.status(200).send('Email sent successfully');
+    res.status(200).json({ message: 'Email sent successfully' });
   } catch (error) {
     console.error('Error sending email:', error);
-    
-    // More detailed error handling
-    if (error.code === 'EAUTH') {
-      res.status(401).send('Authentication failed. Please check your email credentials.');
-    } else {
-      res.status(500).send('Failed to send email');
-    }
-  }
-});
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+    // Detailed error handling
+    if (error.code === 'EAUTH') {
+      return res.status(401).json({ message: 'Authentication failed. Please check your email credentials.' });
+    }
+    return res.status(500).json({ message: 'Failed to send email' });
+  }
+}
